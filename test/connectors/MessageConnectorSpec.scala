@@ -41,7 +41,6 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import play.api.Configuration
 import play.api.Environment
-import play.api.Mode
 import play.api.test.Helpers.running
 import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.bootstrap.config.ServicesConfig
