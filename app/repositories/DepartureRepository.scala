@@ -250,6 +250,26 @@ class DepartureRepository @Inject()(mongo: ReactiveMongoApi, appConfig: AppConfi
     }
   }
 
+  def setBoxId(departureId: DepartureId, boxId: BoxId): Future[Try[Unit]] = {
+    val selector = Json.obj(
+      "_id" -> departureId
+    )
+
+    val modifier = Json.obj("$set" -> Json.obj("boxId" -> boxId))
+
+    collection.flatMap {
+      _.findAndUpdate(selector, modifier)
+        .map {
+          _.lastError
+            .map {
+              le =>
+                if (le.updatedExisting) Success(()) else Failure(new Exception(s"Could not find departure $departureId"))
+            }
+            .getOrElse(Failure(new Exception("Failed to update departure")))
+        }
+    }
+  }
+
   def fetchAllDepartures(eoriNumber: String, channelFilter: ChannelType): Future[Seq[DepartureWithoutMessages]] =
     collection.flatMap {
       _.find(Json.obj("eoriNumber" -> eoriNumber, "channel" -> channelFilter), DepartureWithoutMessages.projection)

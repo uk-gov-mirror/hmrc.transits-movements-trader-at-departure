@@ -18,6 +18,7 @@ package controllers
 
 import audit.AuditService
 import audit.AuditType._
+import connectors.PushNotificationConnector
 import controllers.actions._
 
 import javax.inject.Inject
@@ -35,18 +36,22 @@ import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
+import scala.util.{Failure, Success}
 import scala.xml.NodeSeq
 
 class DeparturesController @Inject()(cc: ControllerComponents,
                                      departureRepository: DepartureRepository,
                                      authenticate: AuthenticateActionProvider,
+                                     authenticatedClientId: AuthenticatedClientIdActionProvider,
                                      authenticatedDepartureForRead: AuthenticatedGetDepartureForReadActionProvider,
                                      departureService: DepartureService,
                                      auditService: AuditService,
-                                     submitMessageService: SubmitMessageService)(implicit ec: ExecutionContext)
+                                     submitMessageService: SubmitMessageService,
+                                     pushNotificationConnector: PushNotificationConnector
+                                    )(implicit ec: ExecutionContext)
     extends BackendController(cc) {
 
-  def post: Action[NodeSeq] = authenticate().async(parse.xml) {
+  def post: Action[NodeSeq] = authenticatedClientId().async(parse.xml) {
     implicit request =>
       departureService
         .createDeparture(request.eoriNumber, request.body, request.channel)
@@ -67,8 +72,20 @@ class DeparturesController @Inject()(cc: ControllerComponents,
                 case SubmissionProcessingResult.SubmissionSuccess =>
                   auditService.auditEvent(DepartureDeclarationSubmitted, departure.messages.head.message, request.channel)
                   auditService.auditEvent(MesSenMES3Added, departure.messages.head.message, request.channel)
-                  Accepted
-                    .withHeaders("Location" -> routes.DeparturesController.get(departure.departureId).url)
+                  pushNotificationConnector.createOrGetBox(request.clientId, departure.departureId).map{
+                    pushResponse => pushResponse match {
+                        // TODO: Replace logger with class specific logger
+
+                      case Left(_) => {
+                        Logger.error(s"Failed to get boxId for the departure ${departure.departureId}")
+                        Accepted.withHeaders("Location" -> routes.DeparturesController.get(departure.departureId).url)
+                      }
+                      case Right(boxId) => departureRepository.setBoxId(departure.departureId, boxId).map{
+                        case Failure(error) => InternalServerError(error.getMessage) // TODO: Confirm desired behaviour
+                        case Success(_) => Accepted.withHeaders("Location" -> routes.DeparturesController.get(departure.departureId).url)
+                      }
+                    }
+                  }
               }
               .recover {
                 case _ => {

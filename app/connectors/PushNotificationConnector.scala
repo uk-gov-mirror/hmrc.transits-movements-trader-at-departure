@@ -43,7 +43,7 @@ class PushNotificationConnector @Inject()(config: AppConfig, http: HttpClient)(i
     if (is2xx(response.status)) {
       response.json.asOpt[T] match {
         case Some(instance) => Right(instance)
-        case _ => Left(response) // TODO Reevaluate behaviour, should this be an internal server error
+        case _              => Left(response) // TODO Reevaluate behaviour, should this be an internal server error
       }
     } else Left(response)
 
