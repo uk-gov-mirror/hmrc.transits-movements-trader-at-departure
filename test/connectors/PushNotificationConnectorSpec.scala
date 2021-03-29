@@ -35,7 +35,9 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import play.api.http.Status
+import play.api.libs.json.Json
 import play.api.test.Helpers.running
+import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.http.HttpResponse
 
 import scala.concurrent.Future
@@ -52,6 +54,8 @@ class PushNotificationConnectorSpec
     with OptionValues {
   override protected def portConfigKey: String = "microservice.services.push-notification.port"
 
+  implicit val headerCarrier: HeaderCarrier = HeaderCarrier()
+
   val testClientId    = "ZrxDm7xXJ4kyPL4sOAj7DTfC8lQV"
   val testDepartureId = DepartureId(1)
 
@@ -66,9 +70,7 @@ class PushNotificationConnectorSpec
           Status.UNAUTHORIZED,
           Status.FORBIDDEN,
           Status.NOT_FOUND,
-          Status.BAD_REQUEST,
-          Status.ACCEPTED,
-          Status.NO_CONTENT
+          Status.BAD_REQUEST
         )
         leftStatuses.foreach(s => {
           server.stubFor(
@@ -95,6 +97,7 @@ class PushNotificationConnectorSpec
             put(urlEqualTo("/box"))
               .willReturn(
                 aResponse()
+                  .withBody(Json.obj("boxId" -> "1c5b9365-18a6-55a5-99c9-83a091ac7f26").toString())
                   .withStatus(s)
               )
           )

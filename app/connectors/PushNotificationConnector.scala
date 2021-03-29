@@ -34,17 +34,22 @@ import scala.concurrent.Future
 
 class PushNotificationConnector @Inject()(config: AppConfig, http: HttpClient)(implicit ec: ExecutionContext) extends Status {
 
+  private case class BoxIdReply(boxId: String)
+  private object BoxIdReply {
+    implicit val format = Json.format[BoxIdReply]
+  }
+
   protected def extractIfSuccessful[T](response: HttpResponse)(implicit reads: Reads[T]): Either[HttpResponse, T] =
     if (is2xx(response.status)) {
       response.json.asOpt[T] match {
         case Some(instance) => Right(instance)
-        case _              => Left(response) // TODO Reevaluate behaviour, should this be an internal server error
+        case _ => Left(response) // TODO Reevaluate behaviour, should this be an internal server error
       }
     } else Left(response)
 
   def createOrGetBox(clientId: String, departureId: DepartureId)(implicit headerCarrier: HeaderCarrier): Future[Either[HttpResponse, BoxId]] = {
 
-    val url     = s"${config.pushNotificationUrl}box"
+    val url     = s"${config.pushNotificationUrl}/box"
     val boxName = s"Departure messages for ${departureId.index}" // TODO Make sure UrlEncoded
     val body    = Json.obj("clientId" -> clientId, "boxName" -> boxName)
 
@@ -53,6 +58,11 @@ class PushNotificationConnector @Inject()(config: AppConfig, http: HttpClient)(i
 
     http
       .PUTString[HttpResponse](url, body.toString())(readRaw, hc = newHeaders, implicitly)
-      .map(r => extractIfSuccessful[BoxId](r))
+      .map(r => {
+        extractIfSuccessful[BoxIdReply](r).map {
+          reply =>
+            BoxId(reply.boxId)
+        }
+      })
   }
 }
