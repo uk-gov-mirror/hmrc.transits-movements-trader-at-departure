@@ -37,12 +37,13 @@ class AppConfig @Inject()(config: Configuration, servicesConfig: ServicesConfig)
   val manageDocumentsUrl: String             = manageDocumentsBaseUrl ++ config.get[String]("microservice.services.manage-documents.uri")
 
   private val eisBaseUrl: String = servicesConfig.baseUrl("eis")
-
-  val eisUrl: String = eisBaseUrl ++ config.get[String]("microservice.services.eis.uri")
+  val eisUrl: String             = eisBaseUrl ++ config.get[String]("microservice.services.eis.uri")
 
   val enrolmentKey: String   = config.get[String]("keys.enrolmentKey")
   val lockRepositoryTtl: Int = config.get[Int]("mongodb.lockRepository.timeToLiveInSeconds")
   val cacheTtl               = config.get[Int]("mongodb.timeToLiveInSeconds")
 
   val messageTranslationFile: String = config.get[String]("message-translation-file")
+
+  val pushNotificationUrl: String = servicesConfig.baseUrl("push-notification")
 }

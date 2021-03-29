@@ -24,21 +24,13 @@ import audit.AuditService
 import audit.AuditType
 import base.SpecBase
 import cats.data.NonEmptyList
-import connectors.MessageConnector
 import connectors.MessageConnector.EisSubmissionResult.ErrorInPayload
-import controllers.actions.AuthenticateActionProvider
-import controllers.actions.AuthenticatedGetDepartureForReadActionProvider
-import controllers.actions.FakeAuthenticateActionProvider
-import controllers.actions.FakeAuthenticatedGetDepartureForReadActionProvider
 import generators.ModelGenerators
-import models.MessageStatus.SubmissionFailed
 import models.MessageStatus.SubmissionPending
-import models.MessageStatus.SubmissionSucceeded
 import models.Departure
 import models.DepartureId
 import models.DepartureStatus
 import models.DepartureWithoutMessages
-import models.MessageId
 import models.MessageSender
 import models.MessageType
 import models.MessageWithStatus
@@ -66,13 +58,11 @@ import play.api.test.FakeRequest
 import play.api.test.Helpers._
 import repositories.DepartureIdRepository
 import repositories.DepartureRepository
-import repositories.LockRepository
 import services.SubmitMessageService
 import utils.Format
 
 import scala.concurrent.Future
 import scala.xml.Utility.trim
-import scala.xml.NodeSeq
 
 class DeparturesControllerSpec extends SpecBase with ScalaCheckPropertyChecks with ModelGenerators with BeforeAndAfterEach with IntegrationPatience {
 
