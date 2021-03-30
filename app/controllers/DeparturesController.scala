@@ -20,7 +20,6 @@ import audit.AuditService
 import audit.AuditType._
 import connectors.PushNotificationConnector
 import controllers.actions._
-
 import javax.inject.Inject
 import models._
 import models.response.ResponseDeparture
@@ -30,13 +29,16 @@ import play.api.libs.json.Json
 import play.api.mvc.Action
 import play.api.mvc.AnyContent
 import play.api.mvc.ControllerComponents
+import play.api.mvc.Result
 import repositories.DepartureRepository
 import services._
+import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.bootstrap.backend.controller.BackendController
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
-import scala.util.{Failure, Success}
+import scala.util.Failure
+import scala.util.Success
 import scala.xml.NodeSeq
 
 class DeparturesController @Inject()(cc: ControllerComponents,
@@ -47,9 +49,24 @@ class DeparturesController @Inject()(cc: ControllerComponents,
                                      departureService: DepartureService,
                                      auditService: AuditService,
                                      submitMessageService: SubmitMessageService,
-                                     pushNotificationConnector: PushNotificationConnector
-                                    )(implicit ec: ExecutionContext)
+                                     pushNotificationConnector: PushNotificationConnector)(implicit ec: ExecutionContext)
     extends BackendController(cc) {
+
+  private def handlePushNotification(clientId: String, departureId: DepartureId)(implicit hc: HeaderCarrier): Future[Result] =
+    pushNotificationConnector.createOrGetBox(clientId, departureId).flatMap {
+      case Left(_) =>
+        // TODO: Replace logger with class specific logger
+        Logger.error(s"Failed to get boxId for the departure $departureId")
+        Future.successful(Accepted.withHeaders("Location" -> routes.DeparturesController.get(departureId).url))
+      case Right(boxId) =>
+        departureRepository.setBoxId(departureId, boxId).map {
+          case Failure(error) =>
+            Logger.error(error.getMessage)
+            InternalServerError
+          // TODO: Confirm desired behaviour
+          case Success(_) => Accepted.withHeaders("Location" -> routes.DeparturesController.get(departureId).url)
+        }
+    }
 
   def post: Action[NodeSeq] = authenticatedClientId().async(parse.xml) {
     implicit request =>
@@ -62,30 +79,18 @@ class DeparturesController @Inject()(cc: ControllerComponents,
           case Right(departure) =>
             submitMessageService
               .submitDeparture(departure)
-              .map {
+              .flatMap {
                 case SubmissionProcessingResult.SubmissionFailureInternal =>
-                  InternalServerError
+                  Future.successful(InternalServerError)
                 case SubmissionProcessingResult.SubmissionFailureExternal =>
-                  BadGateway
+                  Future.successful(BadGateway)
                 case submissionFailureRejected: SubmissionProcessingResult.SubmissionFailureRejected =>
-                  BadRequest(submissionFailureRejected.responseBody)
-                case SubmissionProcessingResult.SubmissionSuccess =>
+                  Future.successful(BadRequest(submissionFailureRejected.responseBody))
+                case SubmissionProcessingResult.SubmissionSuccess => {
                   auditService.auditEvent(DepartureDeclarationSubmitted, departure.messages.head.message, request.channel)
                   auditService.auditEvent(MesSenMES3Added, departure.messages.head.message, request.channel)
-                  pushNotificationConnector.createOrGetBox(request.clientId, departure.departureId).map{
-                    pushResponse => pushResponse match {
-                        // TODO: Replace logger with class specific logger
-
-                      case Left(_) => {
-                        Logger.error(s"Failed to get boxId for the departure ${departure.departureId}")
-                        Accepted.withHeaders("Location" -> routes.DeparturesController.get(departure.departureId).url)
-                      }
-                      case Right(boxId) => departureRepository.setBoxId(departure.departureId, boxId).map{
-                        case Failure(error) => InternalServerError(error.getMessage) // TODO: Confirm desired behaviour
-                        case Success(_) => Accepted.withHeaders("Location" -> routes.DeparturesController.get(departure.departureId).url)
-                      }
-                    }
-                  }
+                  handlePushNotification(request.clientId, departure.departureId)
+                }
               }
               .recover {
                 case _ => {
